@@ -95,30 +95,29 @@ end
 tspan = [estState.last_tm, tm];
 T = tm - estState.last_tm; 
 
-s_v = estState.states(4)*actuate(1);
-s_t = s_v*cos(actuate(2));
-s_r =  - 1/knownConst.WheelBase * s_v * sin(actuate(2));
+s_v = @(x) x(4)*actuate(1);
+s_t = @(x) s_v(x)*cos(actuate(2));
+s_r = @(x) -1/knownConst.WheelBase * s_v(x) * sin(actuate(2));
 
-q = @(t,x) [s_t*cos(x(3)); s_t*sin(x(3)); s_r];
-x0 = estState.states(1:3);
+q = @(t,x) [s_t(x)*cos(x(3)); s_t(x)*sin(x(3)); s_r(x); 0];
+x0 = estState.states(1:4);
 [t_vector, sol] = ode45(q,tspan,x0);
 
 x_p = sol(end,1);
 y_p = sol(end,2);
 r_p = sol(end,3);
-W_p = estState.states(4);
- 
+W_p = sol(end,4);
+states_p = [x_p; y_p; r_p; W_p];
+
 % Covariances P_p
 L = eye(4);
-Q = diag([1,1,1,1]);
+Q = diag([0.1,0.1,0.1,0.005]);
 
-% qP = @(t,P) reshape(A(t,t_vector,s_t,sol)*P + P*(A(t,t_vector,s_t,sol))' + L*Q*L', [16 1]); 
-% P0 = reshape(estState.P, [16 1]);
-% [~,solP] = ode45(qP, tspan,P0); 
+qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
+P0 = reshape(estState.P, [16 1]);
+[~,solP] = ode45(qP, tspan,P0); 
 
-P_p = estState.P; %solP(end);
-
-states_p = [x_p; y_p; r_p; W_p];
+P_p = reshape(solP(end,:),[4 4]);
 
 %% S2: Measurement update
 states_m = states_p;
@@ -164,7 +163,12 @@ estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
 estState.last_tm = tm;
 end
 
-function A = A(t, t_vector, s_t,sol)
+function A = A(t, t_vector, sol, actuate, B)
     [~,ind] = min(abs(t-t_vector));
-    A = [0 0 -s_t*sin(sol(ind,3)) 0; 0 0 s_t*cos(sol(ind,3)) 0; 0 0 0 0; 0 0 0 0];
+
+    s_v = sol(ind,4)*actuate(1);
+    s_t = s_v*cos(actuate(2));
+
+    
+    A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); 0 0 s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); 0 0 0 -1/B*actuate(1)*sin(actuate(2)); 0 0 0 0];
 end

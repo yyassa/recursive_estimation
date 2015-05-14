@@ -93,7 +93,6 @@ end
  
 % State Estimates x_p
 tspan = [estState.last_tm, tm];
-T = tm - estState.last_tm; 
 
 s_v = @(x) x(4)*actuate(1);
 s_t = @(x) s_v(x)*cos(actuate(2));
@@ -113,7 +112,7 @@ states_p = [x_p; y_p; r_p; W_p];
 L = eye(4);
 Q = diag([0.1,0.1,0.1,0.005]);
 
-qP = @(t,P) reshape(A(t,t_vector,states_p,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,states_p,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
+qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
 P0 = reshape(estState.P, [16 1]);
 [~,solP] = ode45(qP, tspan,P0); 
 
@@ -163,10 +162,12 @@ estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
 estState.last_tm = tm;
 end
 
-function A = A(t, t_vector, x,sol, actuate, B)
-s_v = @(x) sol(ind,4)*actuate(1);
-s_t = @(x) s_v(x)*cos(actuate(2));
-
+function A = A(t, t_vector, sol, actuate, B)
     [~,ind] = min(abs(t-t_vector));
-    A = [0 0 -s_t(x)*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); 0 0 s_t(x)*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); 0 0 0 -1/B*actuate(1)*sin(actuate(2)); 0 0 0 0];
+
+    s_v = sol(ind,4)*actuate(1);
+    s_t = s_v*cos(actuate(2));
+
+    
+    A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); 0 0 s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); 0 0 0 -1/B*actuate(1)*sin(actuate(2)); 0 0 0 0];
 end

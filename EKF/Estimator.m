@@ -93,7 +93,6 @@ end
  
 % State Estimates x_p
 tspan = [estState.last_tm, tm];
-T = tm - estState.last_tm; 
 
 s_v = @(x) x(4)*actuate(1);
 s_t = @(x) s_v(x)*cos(actuate(2));
@@ -111,7 +110,7 @@ states_p = [x_p; y_p; r_p; W_p];
 
 % Covariances P_p
 L = eye(4);
-Q = diag([0.1,0.1,0.1,0.005]);
+Q = diag([0.1,0.1,0.001,0.0001]);
 
 qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
 P0 = reshape(estState.P, [16 1]);

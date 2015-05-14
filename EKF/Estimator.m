@@ -89,25 +89,26 @@ end
 % initializing.  Run the estimator.
 
 % Step 1: Prior Update
-s_v = estState.states(4)*actuate(1);
-s_t = s_v*cos(actuate(2));
-s_r = -s_v*sin(actuate(2))/knownConst.WheelBase;
+s_v = @(x) x(4)*actuate(1);
+s_t = @(x) s_v(x)*cos(actuate(2));
+s_r = @(x) -1/knownConst.WheelBase * s_v(x) * sin(actuate(2));
 
 % propagate state
-q = @(t,x) [s_t*cos(x(3)); s_t*sin(x(3)); s_r];
-x0 = estState.states(1:3);
+q = @(t,x) [s_t(x)*cos(x(3)); s_t(x)*sin(x(3)); s_r(x); 0];
+x0 = estState.states;
 [t_vector,sol] = ode45(q,[estState.last_tm, tm],x0);
 
 x_p = sol(end,1);
 y_p = sol(end,2);
 r_p = sol(end,3);
-W_p = estState.states(4);
+W_p = sol(end,4);
+states_p = [x_p; y_p; r_p; W_p];
 
 % propagate P
 L = eye(4);
-Q = diag([0.1,0.1,0.1,0.00005]);
+Q = diag([0.1,0.1,0.001,0.0001]);
 
-qP = @(t,P) reshape(A(t, t_vector, s_t, sol)*reshape(P,[4,4]) + reshape(P,[4,4])*A(t, t_vector, s_t, sol)' + L*Q*L',[16,1]);
+qP = @(t,P) reshape(A(t,t_vector,sol,actuate,knownConst.WheelBase)*reshape(P,[4,4]) + reshape(P,[4,4])*A(t,t_vector,sol,actuate,knownConst.WheelBase)' + L*Q*L',[16,1]);
 P0 = reshape(estState.P,[16,1]);
 [~,sol_P] = ode45(qP,[estState.last_tm, tm],P0);
 P_p = reshape(sol_P(end,:),[4,4]);
@@ -161,8 +162,15 @@ estState.P =  diag([posVar(1), posVar(2), oriVar, radiusVar]);
 estState.last_tm = tm;
 end
 
-function A = A(t, t_vector, s_t,sol)
+function A = A(t, t_vector, sol, actuate, B)
     [~,ind] = min(abs(t-t_vector));
-    A = [0 0 -s_t*sin(sol(ind,3)) 0; 0 0 s_t*cos(sol(ind,3)) 0; 0 0 0 0; 0 0 0 0];
-end 
+    s_v = sol(ind,4)*actuate(1);
+    s_t = s_v*cos(actuate(2));
+    A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); 0 0 s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); 0 0 0 -1/B*actuate(1)*sin(actuate(2)); 0 0 0 0];
+end
+
+% function A = A(t, t_vector, s_t,sol)
+%     [~,ind] = min(abs(t-t_vector));
+%     A = [0 0 -s_t*sin(sol(ind,3)) 0; 0 0 s_t*cos(sol(ind,3)) 0; 0 0 0 0; 0 0 0 0];
+% end 
 

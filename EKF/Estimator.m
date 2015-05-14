@@ -89,8 +89,6 @@ end
 % initializing.  Run the estimator.
 
 % Step 1: Prior Update
-dt = tm - estState.last_tm;
-
 s_v = estState.states(4)*actuate(1);
 s_t = s_v*cos(actuate(2));
 s_r = -s_v*sin(actuate(2))/knownConst.WheelBase;
@@ -107,12 +105,12 @@ W_p = estState.states(4);
 
 % propagate P
 L = eye(4);
-Q = diag([1,1,1,1]);
+Q = diag([0.1,0.1,0.1,0.00005]);
 
 qP = @(t,P) reshape(A(t, t_vector, s_t, sol)*reshape(P,[4,4]) + reshape(P,[4,4])*A(t, t_vector, s_t, sol)' + L*Q*L',[16,1]);
 P0 = reshape(estState.P,[16,1]);
 [~,sol_P] = ode45(qP,[estState.last_tm, tm],P0);
-P_p = estState.P;
+P_p = reshape(sol_P(end,:),[4,4]);
 states_p = [x_p;y_p;r_p;W_p];
 
 

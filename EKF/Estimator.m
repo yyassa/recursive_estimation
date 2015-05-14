@@ -73,10 +73,10 @@ if (tm == 0)
     % Replace the following:
     posEst = [0 0];
     oriEst = 0;
-    posVar = [0 0];
-    oriVar = 0;
-    radiusEst = 0;
-    radiusVar = 0;
+    posVar = 1/12*(2*knownConst.TranslationalStartBound)^2*[1 1];
+    oriVar = 1/12*(2*knownConst.RotationStartBound)^2;
+    radiusEst = knownConst.NominalWheelRadius;
+    radiusVar = 1/12*(2*knownConst.WheelRadiusError)^2;
     return;
 end
 

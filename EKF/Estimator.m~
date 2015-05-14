@@ -129,13 +129,13 @@ if(isfinite(sense(1)))
 
     H = 1/norm([x_p,y_p])*[ x_p y_p 0 0];
     M = 1;
-    R = 1/6*(knownConst.DistNoise)^2;
+    R = 2/9*(knownConst.DistNoise)^2;
     
     K = P_p*H'*inv( H*P_p*H' + M*R*M');
-    states_m = states_p + K*(sense(1) - norm([x_p,y_p]));
+    x_m = x_p + K*(sense(1) = norm([x_p,y_p]));
     P_m = (eye(4) - K*H)*P_p;
     
-    states_p = states_m;
+    x_p = states_m;
     P_p = P_m;
 end
 % Orientation Measurement
@@ -146,21 +146,23 @@ if(isfinite(sense(2)))
     R = knownConst.CompassNoise;
     
     K = P_p*H'*inv( H*P_p*H' + M*R*M');
-    states_m = states_p + K*(sense(2) - states_p(3));
+    x_m = x_p + K*(sense(1) = norm([x_p,y_p]));
     P_m = (eye(4) - K*H)*P_p;
+    
+    x_p = states_m;
+    P_p = P_m;
+    
 end
 
 
 % Replace the following:
-posEst = [states_m(1) states_m(2)];
-oriEst = states_m(3);
-posVar = [P_m(1,1) P_m(2,2)];
-oriVar = P_m(3,3);
-radiusEst = states_m(4);
-radiusVar = P_m(4,4);
+posEst = [0 0];
+oriEst = 0;
+posVar = [0 0];
+oriVar = 0;
+radiusEst = 0;
+radiusVar = 0;
 
-estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
-estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
 estState.last_tm = tm;
 end
 

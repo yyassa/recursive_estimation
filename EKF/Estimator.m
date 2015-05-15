@@ -109,13 +109,44 @@ W_p = sol(end,4);
 states_p = [x_p; y_p; r_p; W_p];
 
 % Covariances P_p
+if(designPart == 1)
 L = eye(4);
-Q = diag([0.1,0.1,0.001,0.0001]);
+Q = diag([0.1,0.1,0.001,0]);
 
 qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
 P0 = reshape(estState.P, [16 1]);
 [~,solP] = ode45(qP, tspan,P0); 
 
+elseif (designPart == 2)
+
+% Because we have two seperate noises now that cannot be simply added to
+% eachother, we need to introduce one more L and Q and adapt the
+% derivation. 
+%
+% For better readability, we can make them three seperate Ls and Qs (for
+% Q_v,Q_r and the Wheel Bias)..using 2 or 3 matrices here is mathematically
+% equivalent, as we mostly fill the last one with zeros!
+%
+% (!) - Unfortunately, the Ls here are time dependent, so it gets shitty
+%       again with plugging it into the ODE.
+
+%L_v: differentiated w.r.t v_v (see function)
+Q_v = eye(4).*knownConst.AngleInputPSD;
+Q_v(4,4) = 0;
+
+%L_r: differentiated w.r.t v_r (see function)
+Q_r = eye(4).*knownConst.VelocityInputPSD;
+Q_r(4,4) = 0;
+
+L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
+Q_W = diag([0,0,0,0.0001]);
+
+% qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
+qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
+P0 = reshape(estState.P, [16 1]);
+[~,solP] = ode45(qP, tspan,P0); 
+
+end
 P_p = reshape(solP(end,:),[4 4]);
 
 %% S2: Measurement update
@@ -170,4 +201,29 @@ function A = A(t, t_vector, sol, actuate, B)
 
     
     A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); 0 0 s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); 0 0 0 -1/B*actuate(1)*sin(actuate(2)); 0 0 0 0];
+end
+
+function L = L_v(t,t_vector,sol,actuate,B)
+    [~,ind] = min(abs(t-t_vector));
+    
+    L = diag([sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) ...
+              sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) ...
+              -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          ...
+              0]);
+    % probably instead of sol(ind,4) here we could use the constant last
+    % estimate of zero because i doesn't change over time..just being
+    % super-consistent.
+end
+
+function L = L_r(t,t_vector,sol,actuate,B)
+    [~,ind] = min(abs(t-t_vector));
+    
+    L = diag([-sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)) ...
+              -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)) ...
+              -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ...
+              0]);
+    
+    % probably instead of sol(ind,4) here we could use the constant last
+    % estimate of zero because i doesn't change over time..just being
+    % super-consistent.
 end

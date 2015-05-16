@@ -112,10 +112,10 @@ states_p = [x_p; y_p; r_p; W_p];
 
 % propagate Covariances P_p
 if(designPart == 1)
-    L_1 = eye(4);
+    L = eye(4);
     Q = diag([0.1,0.1,0.001,0]);
 
-    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_1*Q*L_1', [16 1]); 
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
     P0 = reshape(estState.P, [16 1]);
     [~,solP] = ode45(qP, tspan,P0); 
 
@@ -132,27 +132,23 @@ elseif (designPart == 2)
     % (!) - Unfortunately, the Ls here are time dependent, so it gets shitty
     %       again with plugging it into the ODE.
 
-%     %L_v: differentiated w.r.t v_v (see function)
-%     Q_v = eye(4).*knownConst.AngleInputPSD;
-%     Q_v(4,4) = 0;
-% 
-%     %L_r: differentiated w.r.t v_r (see function)
-%     Q_r = eye(4).*knownConst.VelocityInputPSD;
-%     Q_r(4,4) = 0;
-% 
-%     L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
-%     Q_W = diag([0,0,0,0.0001]);
-% 
-%     % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
-%     qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
-%     P0 = reshape(estState.P, [16 1]);
-%     [~,solP] = ode45(qP, tspan,P0); 
-    
-    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD, 0]); % dimension [3x3]
-    
-    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L(t,t_vector,sol,actuate, knownConst.WheelBase)*Q*(L(t,t_vector,sol,actuate, knownConst.WheelBase))', [16 1]); 
+    %L_v: differentiated w.r.t v_v (see function)
+    Q_v = eye(4).*knownConst.AngleInputPSD;
+    Q_v(4,4) = 0;
+
+    %L_r: differentiated w.r.t v_r (see function)
+    Q_r = eye(4).*knownConst.VelocityInputPSD;
+    Q_r(4,4) = 0;
+
+    L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
+    Q_W = diag([0,0,0,0.0001]);
+
+    % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
     P0 = reshape(estState.P, [16 1]);
-    [~,solP] = ode45(qP, tspan,P0);
+    [~,solP] = ode45(qP, tspan,P0); 
+    
+    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD, 
 
 end
 

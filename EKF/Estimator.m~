@@ -112,10 +112,10 @@ states_p = [x_p; y_p; r_p; W_p];
 
 % propagate Covariances P_p
 if(designPart == 1)
-    L = eye(4);
+    L_1 = eye(4);
     Q = diag([0.1,0.1,0.001,0]);
 
-    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_1*Q*L_1', [16 1]); 
     P0 = reshape(estState.P, [16 1]);
     [~,solP] = ode45(qP, tspan,P0); 
 
@@ -132,23 +132,33 @@ elseif (designPart == 2)
     % (!) - Unfortunately, the Ls here are time dependent, so it gets shitty
     %       again with plugging it into the ODE.
 
-    %L_v: differentiated w.r.t v_v (see function)
-    Q_v = eye(4).*knownConst.AngleInputPSD;
-    Q_v(4,4) = 0;
+%     %L_v: differentiated w.r.t v_v (see function)
+%     Q_v = eye(4).*knownConst.AngleInputPSD;
+%     Q_v(4,4) = 0;
+% 
+%     %L_r: differentiated w.r.t v_r (see function)
+%     Q_r = eye(4).*knownConst.VelocityInputPSD;
+%     Q_r(4,4) = 0;
+% 
+%     L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
+%     Q_W = diag([0,0,0,0.0001]);
+% 
+%     % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
+%     qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
+%     P0 = reshape(estState.P, [16 1]);
+%     [~,solP] = ode45(qP, tspan,P0); 
 
-    %L_r: differentiated w.r.t v_r (see function)
-    Q_r = eye(4).*knownConst.VelocityInputPSD;
-    Q_r(4,4) = 0;
-
-    L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
-    Q_W = diag([0,0,0,0.0001]);
-
-    % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
-    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
-    P0 = reshape(estState.P, [16 1]);
-    [~,solP] = ode45(qP, tspan,P0); 
+    % With the new process noise model we do have only 2 noise components
+    % (v_v and v_r) instead of 4, but with known variances Q_v and Q_r. The 
+    % linearization of the dynamics wrt these noiseterms leeds to:
+    %   modified L(t) matrix with dimension [4x2],
+    %   modified Q matrix with dimension [2x2]
     
-    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD, 
+    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD]); % dimension [2x2]
+    
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L(t,t_vector,sol,actuate, knownConst.WheelBase)*Q*(L(t,t_vector,sol,actuate, knownConst.WheelBase))', [16 1]); 
+    P0 = reshape(estState.P, [16 1]);
+    [~,solP] = ode45(qP, tspan,P0);
 
 end
 
@@ -194,7 +204,7 @@ radiusEst = states_m(4);
 radiusVar = P_m(4,4);
 
 estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
-estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
+estState.P = P_m; %diag([posVar(1) posVar(2) oriVar radiusVar]);
 estState.last_tm = tm;
 end
 
@@ -215,10 +225,10 @@ function L = L(t, t_vector, sol, actuate, B)
 % --> Matrix Q needs to be of size [3x3]
     [~,ind] = min(abs(t-t_vector));
     
-    L = [sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)) 0; ...
-         sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)) 0; ...
-         -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))           0; ...
-         0                                                     0                                                      1];
+    L = [sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)); ...
+         sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)); ...
+         -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ; ...
+         0                                                     0                                                    ];
 
 end
 

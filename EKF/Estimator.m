@@ -120,35 +120,13 @@ if(designPart == 1)
     [~,solP] = ode45(qP, tspan,P0); 
 
 elseif (designPart == 2)
-
-    % Because we have two seperate noises now that cannot be simply added to
-    % eachother, we need to introduce one more L and Q and adapt the
-    % derivation. 
-    %
-    % For better readability, we can make them three seperate Ls and Qs (for
-    % Q_v,Q_r and the Wheel Bias)..using 2 or 3 matrices here is mathematically
-    % equivalent, as we mostly fill the last one with zeros!
-    %
-    % (!) - Unfortunately, the Ls here are time dependent, so it gets shitty
-    %       again with plugging it into the ODE.
-
-%     %L_v: differentiated w.r.t v_v (see function)
-%     Q_v = eye(4).*knownConst.AngleInputPSD;
-%     Q_v(4,4) = 0;
-% 
-%     %L_r: differentiated w.r.t v_r (see function)
-%     Q_r = eye(4).*knownConst.VelocityInputPSD;
-%     Q_r(4,4) = 0;
-% 
-%     L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
-%     Q_W = diag([0,0,0,0.0001]);
-% 
-%     % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
-%     qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
-%     P0 = reshape(estState.P, [16 1]);
-%     [~,solP] = ode45(qP, tspan,P0); 
+    % With the new process noise model we do have only 2 noise components
+    % (v_v and v_r) instead of 4, but with known variances Q_v and Q_r. The 
+    % linearization of the dynamics wrt these noiseterms leeds to:
+    %   modified L(t) matrix with dimension [4x2],
+    %   modified Q matrix with dimension [2x2]
     
-    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD, 0]); % dimension [3x3]
+    Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD]); % dimension [2x2]
     
     qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L(t,t_vector,sol,actuate, knownConst.WheelBase)*Q*(L(t,t_vector,sol,actuate, knownConst.WheelBase))', [16 1]); 
     P0 = reshape(estState.P, [16 1]);
@@ -197,8 +175,8 @@ oriVar = P_m(3,3);
 radiusEst = states_m(4);
 radiusVar = P_m(4,4);
 
-estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
-estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
+estState.states = states_m;
+estState.P = P_m;
 estState.last_tm = tm;
 end
 
@@ -215,38 +193,14 @@ function A = A(t, t_vector, sol, actuate, B)
 end
 
 function L = L(t, t_vector, sol, actuate, B)
-% L has dimension [4x3]
-% --> Matrix Q needs to be of size [3x3]
+% L has dimension [4x2]
     [~,ind] = min(abs(t-t_vector));
     
-    L = [sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)) 0; ...
-         sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)) 0; ...
-         -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))           0; ...
-         0                                                     0                                                      1];
-
-end
-
-function L = L_v(t,t_vector,sol,actuate,B)
-    [~,ind] = min(abs(t-t_vector));
-    
-    L = diag([sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) ...
-              sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) ...
-              -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          ...
-              0]);
+    L = [sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)); ...
+         sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)); ...
+         -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ; ...
+         0                                                     0                                                    ];
     % probably instead of sol(ind,4) here we could use the constant last
     % estimate of zero because i doesn't change over time..just being
-    % super-consistent.
-end
-
-function L = L_r(t,t_vector,sol,actuate,B)
-    [~,ind] = min(abs(t-t_vector));
-    
-    L = diag([-sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)) ...
-              -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)) ...
-              -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ...
-              0]);
-    
-    % probably instead of sol(ind,4) here we could use the constant last
-    % estimate of zero because i doesn't change over time..just being
-    % super-consistent.
+    % super-consistent
 end

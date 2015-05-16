@@ -73,10 +73,14 @@ if (tm == 0)
     % Replace the following:
     posEst = [0 0];
     oriEst = 0;
-    posVar = [0 0];
-    oriVar = 0;
-    radiusEst = 0;
-    radiusVar = 0;
+    posVar = 1/12*(2*knownConst.TranslationStartBound)^2*[1 1];
+    oriVar = 1/12*(2*knownConst.RotationStartBound)^2;
+    radiusEst = knownConst.NominalWheelRadius;
+    radiusVar = 1/12*(2*knownConst.WheelRadiusError)^2;  
+    
+    estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
+    estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
+    estState.last_tm = tm;
     return;
 end
 
@@ -85,11 +89,145 @@ end
 % If we get this far tm is not equal to zero, and we are no longer
 % initializing.  Run the estimator.
 
+%% S1: Prior update
+ 
+% propagate States x_p
+tspan = [estState.last_tm, tm];
+
+s_v = @(x) x(4)*actuate(1);
+s_t = @(x) s_v(x)*cos(actuate(2));
+s_r = @(x) -1/knownConst.WheelBase * s_v(x) * sin(actuate(2));
+
+q = @(t,x) [s_t(x)*cos(x(3)); s_t(x)*sin(x(3)); s_r(x); 0];
+x0 = estState.states(1:4);
+[t_vector, sol] = ode45(q,tspan,x0);
+
+x_p = sol(end,1);
+y_p = sol(end,2);
+r_p = sol(end,3);
+W_p = sol(end,4);
+
+states_p = [x_p; y_p; r_p; W_p];
+
+
+% propagate Covariances P_p
+if(designPart == 1)
+    L = eye(4);
+    Q = diag([0.1,0.1,0.001,0]);
+
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L*Q*L', [16 1]); 
+    P0 = reshape(estState.P, [16 1]);
+    [~,solP] = ode45(qP, tspan,P0); 
+
+elseif (designPart == 2)
+
+    % Because we have two seperate noises now that cannot be simply added to
+    % eachother, we need to introduce one more L and Q and adapt the
+    % derivation. 
+    %
+    % For better readability, we can make them three seperate Ls and Qs (for
+    % Q_v,Q_r and the Wheel Bias)..using 2 or 3 matrices here is mathematically
+    % equivalent, as we mostly fill the last one with zeros!
+    %
+    % (!) - Unfortunately, the Ls here are time dependent, so it gets shitty
+    %       again with plugging it into the ODE.
+
+    %L_v: differentiated w.r.t v_v (see function)
+    Q_v = eye(4).*knownConst.AngleInputPSD;
+    Q_v(4,4) = 0;
+
+    %L_r: differentiated w.r.t v_r (see function)
+    Q_r = eye(4).*knownConst.VelocityInputPSD;
+    Q_r(4,4) = 0;
+
+    L_W = [0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 1];
+    Q_W = diag([0,0,0,0.0001]);
+
+    % qP = APA' + LQL' + LQL' + LQL' (jeweils L_v,L_r,L_W und Q_v,Q_r,Q_W)
+    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_v(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_v*(L_v(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_r(t,t_vector,sol,actuate, knownConst.WheelBase)*Q_r*(L_r(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_W*Q_W*L_W', [16 1]); 
+    P0 = reshape(estState.P, [16 1]);
+    [~,solP] = ode45(qP, tspan,P0); 
+
+end
+
+P_p = reshape(solP(end,:),[4 4]);
+
+%% S2: Measurement update
+states_m = states_p;
+P_m = P_p;
+
+% Distance Measurement
+if(isfinite(sense(1)))
+
+    H = 1/norm([x_p,y_p])*[ x_p y_p 0 0];
+    M = 1;
+    R = 1/6*(knownConst.DistNoise)^2;
+    
+    K = P_p*H'*inv( H*P_p*H' + M*R*M');
+    states_m = states_p + K*(sense(1) - norm([x_p,y_p]));
+    P_m = (eye(4) - K*H)*P_p;
+    
+    states_p = states_m;
+    P_p = P_m;
+end
+% Orientation Measurement
+if(isfinite(sense(2)))
+   
+    H = [ 0 0 1 0];
+    M = 1;
+    R = knownConst.CompassNoise;
+    
+    K = P_p*H'*inv( H*P_p*H' + M*R*M');
+    states_m = states_p + K*(sense(2) - states_p(3));
+    P_m = (eye(4) - K*H)*P_p;
+end
+
+
 % Replace the following:
-posEst = [0 0];
-oriEst = 0;
-posVar = [0 0];
-oriVar = 0;
-radiusEst = 0;
-radiusVar = 0;
+posEst = [states_m(1) states_m(2)];
+oriEst = states_m(3);
+posVar = [P_m(1,1) P_m(2,2)];
+oriVar = P_m(3,3);
+radiusEst = states_m(4);
+radiusVar = P_m(4,4);
+
+estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
+estState.P = diag([posVar(1) posVar(2) oriVar radiusVar]);
+estState.last_tm = tm;
+end
+
+function A = A(t, t_vector, sol, actuate, B)
+    [~,ind] = min(abs(t-t_vector));
+
+    s_v = sol(ind,4)*actuate(1);
+    s_t = s_v*cos(actuate(2));   
+    A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); ...
+         0 0 s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); ...
+         0 0 0 -1/B*actuate(1)*sin(actuate(2)); ...
+         0 0 0 0];
+end
+
+function L = L_v(t,t_vector,sol,actuate,B)
+    [~,ind] = min(abs(t-t_vector));
+    
+    L = diag([sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) ...
+              sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) ...
+              -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          ...
+              0]);
+    % probably instead of sol(ind,4) here we could use the constant last
+    % estimate of zero because i doesn't change over time..just being
+    % super-consistent.
+end
+
+function L = L_r(t,t_vector,sol,actuate,B)
+    [~,ind] = min(abs(t-t_vector));
+    
+    L = diag([-sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)) ...
+              -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)) ...
+              -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ...
+              0]);
+    
+    % probably instead of sol(ind,4) here we could use the constant last
+    % estimate of zero because i doesn't change over time..just being
+    % super-consistent.
 end

@@ -133,23 +133,23 @@ end % end init
     
 % S2:Measurement update
     postParticles = priorParticles;
-%     if(isfinite(sens(1)))
-%         
-%     end
-%     
-%     if(isfinite(sens(2)))
-%         
-%     end
-%     
-%     if(isfinite(sens(3)))
-%         
-%     end
-%     
-%     if(isfinite(sens(4))
-%         
-%     end
     
- 
+    if(isfinite(sens(1)))
+         d = sqrt((priorParticles.x - KC.L).^2 + priorParticles.y.^2);
+         %lik_* has to be looped through all particles.
+         lik_cor = makedist('Triangular','a',sens(1) - d(1,:) - KC.wbar,'b',sens(1) - d(1,:),'c',sens(1) - d(1,:) + KC.wbar);
+         lik_false = makedist('Triangular','a',sens(1) - d(2,:) - KC.wbar,'b',sens(1) - d(2,:),'c',sens(1) - d(1,:) + KC.wbar);
+         beta = sbar*random(lik_false,1,N)+(1-sbar)*random(lik_cor,1,N);
+         alpha = 1/sum(beta);
+         beta = alpha*beta;
+         beta_kum = cumsum(beta);
+       
+         for j = 1:N;
+            r = rand();
+            postParticles.x = 0;
+         end
+    end
+    
 % Replace the following:
 % postParticles.x = zeros(2,N);
 % postParticles.y = zeros(2,N);

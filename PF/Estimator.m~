@@ -151,10 +151,10 @@ end % end init
        
          for j = 1:N;
             r = rand();
-            nbar = beta_kum(find(beta_kum >= r,1));
-            postParticles.x(:,j) = nbar*priorParticles.x(:,j);
-            postParticles.y(:,j) = nbar*priorParticles.y(:,j);
-            postParticles.h(:,j) = priorParticles.h(:,j);
+            nbar = beta_kum(find(beta_kum >= r,k);
+            postParticles.x = nbar*priorParticles.x;
+            postParticles.y = nbar*priorParticles.x;
+            postParticles.h = priorParticles.x;
          end
     end
     

@@ -177,6 +177,14 @@ for i = 1:4
         beta = alpha*beta;         
         beta_kum = cumsum(beta);
        
+        % reinizialise randomly if filter runs into numerical issues:
+        if any(isnan(beta_kum))
+            postParticles.x = KC.L*rand(2,N);
+            postParticles.y = KC.L*rand(2,N);
+            postParticles.h = 2*pi*rand(2,N)-pi;
+            return;
+        end
+        
         for j = 1:N;
            r = rand();
            nbar = find(beta_kum >= r,1);

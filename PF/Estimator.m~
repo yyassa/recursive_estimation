@@ -133,26 +133,23 @@ end % end init
     
 % S2:Measurement update
 postParticles = priorParticles;
-
-x_sens = [KC.L KC.L 0    0]; % position of sensors in x
-y_sens = [0    KC.L KC.L 0]; % position of sensors in y
 for i = 1:length(sens)    
-    if(isfinite(sens(i)))        
+    if(isfinite(sens(1)))        
         beta = zeros(1,N);         
         for k = 1:N
             % calculate distances to both robots
-            d_1A = sqrt((priorParticles.x(1,k) - x_sens(i)).^2 + (priorParticles.y(1,k) - y_sens(i)).^2);
-            d_1B = sqrt((priorParticles.x(2,k) - x_sens(i)).^2 + (priorParticles.y(2,k) - y_sens(i)).^2);
+            d_1A = sqrt((priorParticles.x(1,k) - KC.L).^2 + priorParticles.y(1,k).^2);
+            d_1B = sqrt((priorParticles.x(2,k) - KC.L).^2 + priorParticles.y(2,k).^2);
             
             % probability according to triangular distribution (linear
             % inside region [-wbar,wbar], 0 otherwise)
             lik_correct = 0;
             lik_false   = 0;
-            if abs(sens(i)-d_1A) < KC.wbar
-                lik_correct = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
+            if abs(sens(1)-d_1A) < KC.wbar
+                lik_correct = 1/KC.wbar - abs(sens(1)-d_1A)/KC.wbar^2;
             end
-            if abs(sens(i)-d_1B) < KC.wbar
-                lik_false = 1/KC.wbar - abs(sens(i)-d_1B)/KC.wbar^2;
+            if abs(sens(1)-d_1B) < KC.wbar
+                lik_false = 1/KC.wbar - abs(sens(1)-d_1B)/KC.wbar^2;
             end
             % calculate likelihood according to total probability theorem
             beta(k) = KC.sbar*lik_false + (1-KC.sbar)*lik_correct;
@@ -169,7 +166,6 @@ for i = 1:length(sens)
            postParticles.h(:,j) = priorParticles.h(:,nbar);
         end
     end
-end
     
 % Replace the following:
 % postParticles.x = zeros(2,N);

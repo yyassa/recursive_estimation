@@ -136,7 +136,7 @@ postParticles = priorParticles;
 
 x_sens = [KC.L KC.L 0    0]; % position of sensors in x
 y_sens = [0    KC.L KC.L 0]; % position of sensors in y
-for i = 1:length(sens)    
+for i = 1:4    
     if(isfinite(sens(i)))        
         beta = zeros(1,N);         
         for k = 1:N
@@ -144,15 +144,31 @@ for i = 1:length(sens)
             d_1A = sqrt((priorParticles.x(1,k) - x_sens(i)).^2 + (priorParticles.y(1,k) - y_sens(i)).^2);
             d_1B = sqrt((priorParticles.x(2,k) - x_sens(i)).^2 + (priorParticles.y(2,k) - y_sens(i)).^2);
             
-            % probability according to triangular distribution (linear
-            % inside region [-wbar,wbar], 0 otherwise)
-            lik_correct = 0;
-            lik_false   = 0;
-            if abs(sens(i)-d_1A) < KC.wbar
-                lik_correct = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
-            end
-            if abs(sens(i)-d_1B) < KC.wbar
-                lik_false = 1/KC.wbar - abs(sens(i)-d_1B)/KC.wbar^2;
+            if i<3 % Sensors 1 and 2
+                
+                % probability according to triangular distribution (linear
+                % inside region [-wbar,wbar], 0 otherwise)
+                lik_correct = 0;
+                lik_false   = 0;
+                if abs(sens(i)-d_1A) < KC.wbar
+                    lik_correct = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
+                end
+                if abs(sens(i)-d_1B) < KC.wbar
+                    lik_false = 1/KC.wbar - abs(sens(i)-d_1B)/KC.wbar^2;
+                end
+                
+            else % Sensors 3 and 4
+                
+                % probability according to triangular distribution (linear
+                % inside region [-wbar,wbar], 0 otherwise)
+                lik_correct = 0;
+                lik_false   = 0;
+                if abs(sens(i)-d_1B) < KC.wbar
+                    lik_correct = 1/KC.wbar - abs(sens(i)-d_1B)/KC.wbar^2;
+                end
+                if abs(sens(i)-d_1A) < KC.wbar
+                    lik_false = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
+                end
             end
             % calculate likelihood according to total probability theorem
             beta(k) = KC.sbar*lik_false + (1-KC.sbar)*lik_correct;
@@ -168,13 +184,26 @@ for i = 1:length(sens)
            postParticles.y(:,j) = priorParticles.y(:,nbar);
            postParticles.h(:,j) = priorParticles.h(:,nbar);
         end
+        
+        % if there are more than one measurement at the same time:
+        priorParticles = postParticles;
     end
 end
     
-% Replace the following:
-% postParticles.x = zeros(2,N);
-% postParticles.y = zeros(2,N);
-% postParticles.h = zeros(2,N);
+% roughening
+K = 0.01;
+E_xy =sqrt(2)*KC.L;    % maximum inter-sample variability
+E_h = pi;              % maximum inter-sample variability
+sigma_xy = K*E_xy*N^(1/6);
+sigma_h = K*E_h*N^(1/6);
+
+delta_x = randn(2,N)*sigma_xy^2;
+delta_y = randn(2,N)*sigma_xy^2;
+delta_h = randn(2,N)*sigma_h^2;
+
+postParticles.x = postParticles.x + delta_x;
+postParticles.y = postParticles.y + delta_y;
+postParticles.h = postParticles.h + delta_h;
 
 end % end estimator
 

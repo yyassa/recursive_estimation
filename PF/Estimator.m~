@@ -133,21 +133,21 @@ end % end init
     
 % S2:Measurement update
     postParticles = priorParticles;
-%     if(isfinite(sens(1)))
-%         
-%     end
-%     
-%     if(isfinite(sens(2)))
-%         
-%     end
-%     
-%     if(isfinite(sens(3)))
-%         
-%     end
-%     
-%     if(isfinite(sens(4))
-%         
-%     end
+    if(isfinite(sens))
+        
+    end
+    
+    if(isfinite(sens))
+        
+    end
+    
+    if(isfinite(sens))
+        
+    end
+    
+    if(isfinite(sens))
+        
+    end
     
  
 % Replace the following:

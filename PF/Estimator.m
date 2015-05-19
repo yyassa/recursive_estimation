@@ -134,28 +134,37 @@ end % end init
 % S2:Measurement update
     postParticles = priorParticles;
     
-    if(isfinite(sens(1)))
-         d = sqrt((priorParticles.x - KC.L).^2 + priorParticles.y.^2);
-         
-         lik_cor =   @(d) makedist('Triangular','a',sens(1) - d(1) - KC.wbar,'b',sens(1) - d(1),'c',sens(1) - d(1) + KC.wbar);
-         lik_false = @(d) makedist('Triangular','a',sens(1) - d(2) - KC.wbar,'b',sens(1) - d(2),'c',sens(1) - d(2) + KC.wbar);
-         beta = zeros(1,N);
-         
-         for k = 1:N
-            beta(k) = KC.sbar*random(lik_false(d(:,k)))+(1-KC.sbar)*random(lik_cor(d(:,k)));
-         end
-         
-         alpha = 1/sum(beta);
-         beta = alpha*beta;
-         beta_kum = cumsum(beta);
+    if(isfinite(sens(1)))        
+        beta = zeros(1,N);         
+        for k = 1:N
+            % calculate distances to both robots
+            d_1A = sqrt((priorParticles.x(1,k) - KC.L).^2 + priorParticles.y(1,k).^2);
+            d_1B = sqrt((priorParticles.x(2,k) - KC.L).^2 + priorParticles.y(2,k).^2);
+            
+            % probability according to triangular distribution (linear
+            % inside region [-wbar,wbar], 0 otherwise)
+            lik_correct = 0;
+            lik_false   = 0;
+            if abs(sens(1)-d_1A) < KC.wbar
+                lik_correct = 1/KC.wbar - abs(sens(1)-d_1A)/KC.wbar^2;
+            end
+            if abs(sens(1)-d_1B) < KC.wbar
+                lik_false = 1/KC.wbar - abs(sens(1)-d_1B)/KC.wbar^2;
+            end
+            % calculate likelihood according to total probability theorem
+            beta(k) = KC.sbar*lik_false + (1-KC.sbar)*lik_correct;
+        end        
+        alpha = 1/sum(beta);
+        beta = alpha*beta;         
+        beta_kum = cumsum(beta);
        
-         for j = 1:N;
-            r = rand();
-            nbar = beta_kum(find(beta_kum >= r,1));
-            postParticles.x(:,j) = nbar*priorParticles.x(:,j);
-            postParticles.y(:,j) = nbar*priorParticles.y(:,j);
-            postParticles.h(:,j) = priorParticles.h(:,j);
-         end
+        for j = 1:N;
+           r = rand();
+           nbar = find(beta_kum >= r,1);
+           postParticles.x(:,j) = priorParticles.x(:,nbar);
+           postParticles.y(:,j) = priorParticles.y(:,nbar);
+           postParticles.h(:,j) = priorParticles.h(:,nbar);
+        end
     end
     
 % Replace the following:

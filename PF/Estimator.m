@@ -72,7 +72,7 @@ end
 
 %% Mode 1: Initialization
 % Set number of particles:
-N = 1000; % obviously, you will need more particles than 10.
+N = 2000; % obviously, you will need more particles than 10.
 if (init)
     % Do the initialization of your estimator here!
     % These particles are the posterior particles at discrete time k = 0
@@ -95,39 +95,56 @@ end % end init
     priorParticles.h = prevPostParticles.h;
     
     %Lower wall B1
-    B1 = priorParticles.y <= 0 & diag(act)*sin(priorParticles.h)<0;
-    priorParticles.y(B1) = 0;
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
+    % case a: h >= -90deg
+    B1a = priorParticles.y <= 0 & diag(act)*sin(priorParticles.h)<0 & priorParticles.h >= -pi/2;
+    priorParticles.y(B1a) = 0;
     alpha = -priorParticles.h.*(1+v); 
-    priorParticles.h(B1) = alpha(B1);
-    
-    %Lower wall B1
-    B1 = priorParticles.y <= 0 & diag(act)*sin(priorParticles.h)<0;
-    priorParticles.y(B1) = 0;
-    v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
-    alpha = -priorParticles.h.*(1+v); 
-    priorParticles.h(B1) = alpha(B1);
+    priorParticles.h(B1a) = alpha(B1a);
+    % case b: h < -90deg
+    B1b = priorParticles.y <= 0 & diag(act)*sin(priorParticles.h)<0 & priorParticles.h < -pi/2;
+    priorParticles.y(B1b) = 0;
+    alpha = (pi + priorParticles.h).*(1+v); 
+    priorParticles.h(B1b) = pi - alpha(B1b);
     
     %Right wall B2
-    B2 = priorParticles.x >= KC.L & diag(act)*cos(priorParticles.h)>0;
-    priorParticles.x(B2) = KC.L;
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
+    % case a: h >= 0
+    B2a = priorParticles.x >= KC.L & diag(act)*cos(priorParticles.h)>0 & priorParticles.h >= 0;
+    priorParticles.x(B2a) = KC.L;
     alpha = (pi/2 - priorParticles.h).*(1+v); 
-    priorParticles.h(B2) = pi/2 + alpha(B2);
+    priorParticles.h(B2a) = pi/2 + alpha(B2a);
+    % case b: h < 0
+    B2b = priorParticles.x >= KC.L & diag(act)*cos(priorParticles.h)>0 & priorParticles.h < 0;
+    priorParticles.x(B2b) = KC.L;
+    alpha = (pi/2 + priorParticles.h).*(1+v); 
+    priorParticles.h(B2b) = -pi/2 - alpha(B2b);
     
     %Upper wall B3
-    B3 = priorParticles.y >= KC.L & diag(act)*sin(priorParticles.h)>0;
-    priorParticles.y(B3) = KC.L;
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
+    % case a: h <= 90deg
+    B3a = priorParticles.y >= KC.L & diag(act)*sin(priorParticles.h)>0 & priorParticles.h <= pi/2;
+    priorParticles.y(B3a) = KC.L;
     alpha = priorParticles.h.*(1+v); 
-    priorParticles.h(B3) = -alpha(B3);
+    priorParticles.h(B3a) = -alpha(B3a);
+    % case a: h > 90deg
+    B3b = priorParticles.y >= KC.L & diag(act)*sin(priorParticles.h)>0 & priorParticles.h > pi/2;
+    priorParticles.y(B3b) = KC.L;
+    alpha = (pi - priorParticles.h).*(1+v); 
+    priorParticles.h(B3b) = -pi + alpha(B3b);
     
     %Left wall B4
-    B4 = priorParticles.x <= 0 & diag(act)*cos(priorParticles.h)<0;
-    priorParticles.x(B4) = 0;
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
+    % case a: h <= 0
+    B4a = priorParticles.x <= 0 & diag(act)*cos(priorParticles.h)<0 & priorParticles.h <= 0;
+    priorParticles.x(B4a) = 0;
+    alpha = (pi/2 - priorParticles.h).*(1+v); 
+    priorParticles.h(B4a) = -pi/2 + alpha(B4a);
+    % case a: h > 0
+    B4b = priorParticles.x <= 0 & diag(act)*cos(priorParticles.h)<0 & priorParticles.h > 0;
+    priorParticles.x(B4b) = 0;
     alpha = (priorParticles.h-pi/2).*(1+v); 
-    priorParticles.h(B4) = pi/2-alpha(B4);
+    priorParticles.h(B4b) = pi/2 - alpha(B4b);
     
     priorParticles.h = mod(priorParticles.h+pi,2*pi)-pi;
     
@@ -209,9 +226,14 @@ delta_x = randn(2,N)*sigma_xy^2;
 delta_y = randn(2,N)*sigma_xy^2;
 delta_h = randn(2,N)*sigma_h^2;
 
-postParticles.x = postParticles.x + delta_x;
-postParticles.y = postParticles.y + delta_y;
-postParticles.h = postParticles.h + delta_h;
+postParticles.x = limit(postParticles.x + delta_x,0,KC.L);
+postParticles.y = limit(postParticles.y + delta_y,0,KC.L);
+postParticles.h = limit(postParticles.h + delta_h,-pi,pi);
 
 end % end estimator
+
+function a = limit(a,lowerbound, upperbound)
+    a(a < lowerbound) = lowerbound;
+    a(a > upperbound) = upperbound;
+end
 

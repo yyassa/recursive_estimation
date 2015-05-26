@@ -230,31 +230,22 @@ for i = 1:4    % for all Sensors
 end
     
 % Roughening
-K = 0.02;
-% maximum inter-sample variabilities
-E_x1 = max(postParticles.x(1,:))-min(postParticles.x(1,:)); %sqrt(2)*KC.L;    
-E_x2 = max(postParticles.x(2,:))-min(postParticles.x(2,:));
-E_y1 = max(postParticles.y(1,:))-min(postParticles.y(1,:));
-E_y2 = max(postParticles.y(2,:))-min(postParticles.y(2,:));
-E_h  = pi;
 
-sigma_x1 = K*E_x1*N^(1/6);
-sigma_x2 = K*E_x2*N^(1/6);
-sigma_y1 = K*E_y1*N^(1/6);
-sigma_y2 = K*E_y2*N^(1/6);
+K = 0.01;
+E_xy =sqrt(2)*KC.L;    % maximum inter-sample variability
+E_h = pi;              % maximum inter-sample variability
+
+sigma_xy = K*E_xy*N^(1/6);
 sigma_h = K*E_h*N^(1/6);
 
-delta_x1 = randn(1,N)*sigma_x1^2;
-delta_x2 = randn(1,N)*sigma_x2^2;
-delta_x = [delta_x1; delta_x2];
-delta_y1 = randn(1,N)*sigma_y1^2;
-delta_y2 = randn(1,N)*sigma_y2^2;
-delta_y = [delta_y1; delta_y2];
+
+delta_x = randn(2,N)*sigma_xy^2;
+delta_y = randn(2,N)*sigma_xy^2;
 delta_h = randn(2,N)*sigma_h^2;
 
 postParticles.x = limit(postParticles.x + delta_x,0,KC.L);
 postParticles.y = limit(postParticles.y + delta_y,0,KC.L);
-postParticles.h = mod(postParticles.h + delta_h + pi,2*pi) - pi; % limit(postParticles.h + delta_h,-pi,pi); 
+postParticles.h = mod(postParticles.h + delta_h + pi,2*pi) - pi; %limit(postParticles.h + delta_h,-pi,pi); 
 
 end % end estimator
 

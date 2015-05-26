@@ -68,14 +68,15 @@ function [posEst,oriEst,radiusEst, posVar,oriVar,radiusVar,estState] = Estimator
 
 %% Mode 1: Initialization
 if (tm == 0)
-    % Do the initialization of your estimator here!
     
-    % Replace the following:
+    % Initialize position/orientation with zero & wheel radius with W_0
     posEst = [0 0];
     oriEst = 0;
+    radiusEst = knownConst.NominalWheelRadius;
+    
+    % Initialize variances with uniform dist variance.
     posVar = 1/12*(2*knownConst.TranslationStartBound)^2*[1 1];
     oriVar = 1/12*(2*knownConst.RotationStartBound)^2;
-    radiusEst = knownConst.NominalWheelRadius;
     radiusVar = 1/12*(2*knownConst.WheelRadiusError)^2;  
     
     estState.states = [posEst(1); posEst(2); oriEst; radiusEst];
@@ -91,52 +92,84 @@ end
 
 %% S1: Prior update
  
-% propagate States x_p
 tspan = [estState.last_tm, tm];
 
-s_v = @(x) x(4)*actuate(1);
-s_t = @(x) s_v(x)*cos(actuate(2));
-s_r = @(x) -1/knownConst.WheelBase * s_v(x) * sin(actuate(2));
+% Define: xP - [20x1] state/covariance vector: 
+% xP(1:4) ~ states 
+% xP(5:20) ~ stacked elements of P
 
-q = @(t,x) [s_t(x)*cos(x(3)); s_t(x)*sin(x(3)); s_r(x); 0];
-x0 = estState.states(1:4);
-[t_vector, sol] = ode45(q,tspan,x0);
+% Kinematic equations as given in problem
+s_v = @(xP) xP(4)*actuate(1);
+s_t = @(xP) s_v(xP)*cos(actuate(2));
+s_r = @(xP) -1/knownConst.WheelBase * s_v(xP) * sin(actuate(2));
 
-x_p = sol(end,1);
-y_p = sol(end,2);
-r_p = sol(end,3);
-W_p = sol(end,4);
+% Differentiate system dynamics wrt states
+A = @(t,xP) [0 0 -s_t(xP)*sin(xP(3)) actuate(1)*cos(actuate(2))*cos(xP(3)); ...
+             0 0  s_t(xP)*cos(xP(3)) actuate(1)*cos(actuate(2))*sin(xP(3)); ...
+             0 0                    0            -1/knownConst.WheelBase*actuate(1)*sin(actuate(2)); ...
+             0 0                    0                                          0];
 
-states_p = [x_p; y_p; r_p; W_p];
-
-
-% propagate Covariances P_p
 if(designPart == 1)
-    L_1 = eye(4);
+    
+    L = eye(4);
     Q = diag([0.1,0.1,0.001,0]);
-
-    qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L_1*Q*L_1', [16 1]); 
+    
+    % Stacked ODE
+    q = @(t,xP) [ % state dynamics
+                   s_t(xP)*cos(xP(3)); ...
+                   s_t(xP)*sin(xP(3)); ...
+                   s_r(xP); ...
+                   0; ...
+                   % covariance dynamic
+                   reshape( ... %vectorize 4x4 covariance to 16x1
+                        A(t,xP)*reshape(xP(5:20),[4 4]) ... 
+                        + reshape(xP(5:20),[4 4])*(A(t,xP))' + L*Q*L', ...
+                    [16 1])];
+    
+    % Initialize and solve ODE
+    states0 = estState.states(1:4);
     P0 = reshape(estState.P, [16 1]);
-    [~,solP] = ode45(qP, tspan,P0); 
+    [~, sol] = ode45(q,tspan,[states0;P0]);
+
+    x_p = sol(end,1);
+    y_p = sol(end,2);
+    r_p = sol(end,3);
+    W_p = sol(end,4);
+    states_p = [x_p; y_p; r_p; W_p];
+    P_p = reshape(sol(end,5:20),[4 4]);
 
 elseif (designPart == 2)
     % With the new process noise model we do have only 2 noise components
     % (v_v and v_r) instead of 4, but with known variances Q_v and Q_r. The 
-    % linearization of the dynamics wrt these noiseterms leeds to:
+    % linearization of the dynamics wrt these noiseterms leads to:
     %   modified L(t) matrix with dimension [4x2],
     %   modified Q matrix with dimension [2x2]
+    
+    q = @(t,x) [s_t(x)*cos(x(3)); s_t(x)*sin(x(3)); s_r(x); 0];
+    states0 = estState.states(1:4);
+    [t_vector, sol] = ode45(q,tspan,states0);
+
+    x_p = sol(end,1);
+    y_p = sol(end,2);
+    r_p = sol(end,3);
+    W_p = sol(end,4);
+
+states_p = [x_p; y_p; r_p; W_p];
     
     Q = diag([knownConst.VelocityInputPSD, knownConst.AngleInputPSD]); % dimension [2x2]
     
     qP = @(t,P) reshape(A(t,t_vector,sol,actuate, knownConst.WheelBase)*reshape(P,[4 4]) + reshape(P,[4 4])*(A(t,t_vector,sol,actuate, knownConst.WheelBase))' + L(t,t_vector,sol,actuate, knownConst.WheelBase)*Q*(L(t,t_vector,sol,actuate, knownConst.WheelBase))', [16 1]); 
     P0 = reshape(estState.P, [16 1]);
     [~,solP] = ode45(qP, tspan,P0);
-
+    P_p = reshape(solP(end,:),[4 4]);
+    
 end
 
-P_p = reshape(solP(end,:),[4 4]);
+
 
 %% S2: Measurement update
+
+% Incase of no measurement, set posterior estimate equal to prior update
 states_m = states_p;
 P_m = P_p;
 
@@ -151,9 +184,12 @@ if(isfinite(sense(1)))
     states_m = states_p + K*(sense(1) - norm([x_p,y_p]));
     P_m = (eye(4) - K*H)*P_p;
     
+    % Incase an orientation measurement follows, trick it into using the
+    % distance measurement updated estimate as its prior.
     states_p = states_m;
     P_p = P_m;
 end
+
 % Orientation Measurement
 if(isfinite(sense(2)))
    
@@ -167,7 +203,6 @@ if(isfinite(sense(2)))
 end
 
 
-% Replace the following:
 posEst = [states_m(1) states_m(2)];
 oriEst = states_m(3);
 posVar = [P_m(1,1) P_m(2,2)];
@@ -177,30 +212,38 @@ radiusVar = P_m(4,4);
 
 estState.states = states_m;
 estState.P = P_m;
+
+% remember timestamp for next iteration for the cont. ode solver
 estState.last_tm = tm;
 end
 
-function A = A(t, t_vector, sol, actuate, B)
-% A has dimension [4x4]
-    [~,ind] = min(abs(t-t_vector));
-
-    s_v = sol(ind,4)*actuate(1);
-    s_t = s_v*cos(actuate(2));   
-    A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); ...
-         0 0  s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); ...
-         0 0                    0            -1/B*actuate(1)*sin(actuate(2)); ...
-         0 0                    0                                          0];
-end
+% function A = A(t, t_vector, sol, actuate, B)
+% % A has dimension [4x4]
+% 
+%     %find the closest timestamp to t from the first ode's time vector
+%     %(state and variance propagation use seperate ode funcs -> different time vectors) 
+%     [~,ind] = min(abs(t-t_vector));
+% 
+%     s_v = sol(ind,4)*actuate(1);
+%     s_t = s_v*cos(actuate(2));
+%     % differentiate system dynamics wrt states
+%     A = [0 0 -s_t*sin(sol(ind,3)) actuate(1)*cos(actuate(2))*cos(sol(ind,3)); ...
+%          0 0  s_t*cos(sol(ind,3)) actuate(1)*cos(actuate(2))*sin(sol(ind,3)); ...
+%          0 0                    0            -1/B*actuate(1)*sin(actuate(2)); ...
+%          0 0                    0                                          0];
+% end
 
 function L = L(t, t_vector, sol, actuate, B)
 % L has dimension [4x2]
+    
+    %find the closest timestamp to t from the first ode's time vector
+    %(state and variance propagation use seperate ode funcs -> different time vectors) 
     [~,ind] = min(abs(t-t_vector));
     
+    % differentiate 
     L = [sol(ind,4)*actuate(1)*cos(actuate(2))*cos(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*cos(sol(ind,3)); ...
          sol(ind,4)*actuate(1)*cos(actuate(2))*sin(sol(ind,3)) -sol(ind,4)*actuate(1)*sin(actuate(2))*sin(sol(ind,3)); ...
          -(1/B)*sol(ind,4)*actuate(1)*sin(actuate(2))          -(1/B)*sol(ind,4)*actuate(1)*cos(actuate(2))          ; ...
          0                                                     0                                                    ];
-    % probably instead of sol(ind,4) here we could use the constant last
-    % estimate of zero because i doesn't change over time..just being
-    % super-consistent
+
 end

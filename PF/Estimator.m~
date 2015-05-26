@@ -198,7 +198,7 @@ for i = 1:4    % for all Sensors
         beta = alpha*beta;         
         beta_kum = cumsum(beta);
        
-        % Reinizialise randomly if filter runs into numerical issues:
+        % reinizialise randomly if filter runs into numerical issues:
         if any(isnan(beta_kum))
             postParticles.x = KC.L*rand(2,N);
             postParticles.y = KC.L*rand(2,N);
@@ -206,7 +206,6 @@ for i = 1:4    % for all Sensors
             return;
         end
         
-        % Resampling:
         for j = 1:N;
            r = rand();
            nbar = find(beta_kum >= r,1);
@@ -215,12 +214,12 @@ for i = 1:4    % for all Sensors
            postParticles.h(:,j) = priorParticles.h(:,nbar);
         end
         
-        % If there is more than one measurement at the same time:
+        % if there are more than one measurement at the same time:
         priorParticles = postParticles;
     end
 end
     
-% Roughening
+% roughening
 K = 0.01;
 E_xy =sqrt(2)*KC.L;    % maximum inter-sample variability
 E_h = pi;              % maximum inter-sample variability
@@ -237,7 +236,7 @@ postParticles.h = limit(postParticles.h + delta_h,-pi,pi);
 
 end % end estimator
 
-function a = limit(a, lowerbound, upperbound)
+function a = limit(a,lowerbound, upperbound)
     a(a < lowerbound) = lowerbound;
     a(a > upperbound) = upperbound;
 end

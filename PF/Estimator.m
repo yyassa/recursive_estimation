@@ -157,10 +157,14 @@ postParticles = priorParticles;
 % Save Sensorlocations:
 x_sens = [KC.L KC.L 0    0]; % position of sensors in x
 y_sens = [0    KC.L KC.L 0]; % position of sensors in y
+
 for i = 1:4    % for all Sensors
-    if(isfinite(sens(i)))        
-        beta = zeros(1,N);         
-        for k = 1:N
+    if(isfinite(sens(i)))  % if a measurement is published do
+        % preallocate
+        beta = zeros(1,N);
+        
+        for k = 1:N % for all Particles do
+            
             % calculate distances to both robots
             d_1A = sqrt((priorParticles.x(1,k) - x_sens(i)).^2 + (priorParticles.y(1,k) - y_sens(i)).^2);
             d_1B = sqrt((priorParticles.x(2,k) - x_sens(i)).^2 + (priorParticles.y(2,k) - y_sens(i)).^2);
@@ -191,11 +195,16 @@ for i = 1:4    % for all Sensors
                     lik_false = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
                 end
             end
+            
             % calculate likelihood according to total probability theorem
             beta(k) = KC.sbar*lik_false + (1-KC.sbar)*lik_correct;
-        end        
+        end
+        
+        % normalise beta
         alpha = 1/sum(beta);
-        beta = alpha*beta;         
+        beta = alpha*beta;
+        
+        % cummulate (beta_kum contains values from 0 to 1 in increasing order)
         beta_kum = cumsum(beta);
        
         % Reinizialise randomly if filter runs into numerical issues:
@@ -221,19 +230,31 @@ for i = 1:4    % for all Sensors
 end
     
 % Roughening
-K = 0.01;
-E_xy =sqrt(2)*KC.L;    % maximum inter-sample variability
-E_h = pi;              % maximum inter-sample variability
-sigma_xy = K*E_xy*N^(1/6);
+K = 0.02;
+% maximum inter-sample variabilities
+E_x1 = max(postParticles.x(1,:))-min(postParticles.x(1,:)); %sqrt(2)*KC.L;    
+E_x2 = max(postParticles.x(2,:))-min(postParticles.x(2,:));
+E_y1 = max(postParticles.y(1,:))-min(postParticles.y(1,:));
+E_y2 = max(postParticles.y(2,:))-min(postParticles.y(2,:));
+E_h  = pi;
+
+sigma_x1 = K*E_x1*N^(1/6);
+sigma_x2 = K*E_x2*N^(1/6);
+sigma_y1 = K*E_y1*N^(1/6);
+sigma_y2 = K*E_y2*N^(1/6);
 sigma_h = K*E_h*N^(1/6);
 
-delta_x = randn(2,N)*sigma_xy^2;
-delta_y = randn(2,N)*sigma_xy^2;
+delta_x1 = randn(1,N)*sigma_x1^2;
+delta_x2 = randn(1,N)*sigma_x2^2;
+delta_x = [delta_x1; delta_x2];
+delta_y1 = randn(1,N)*sigma_y1^2;
+delta_y2 = randn(1,N)*sigma_y2^2;
+delta_y = [delta_y1; delta_y2];
 delta_h = randn(2,N)*sigma_h^2;
 
 postParticles.x = limit(postParticles.x + delta_x,0,KC.L);
 postParticles.y = limit(postParticles.y + delta_y,0,KC.L);
-postParticles.h = limit(postParticles.h + delta_h,-pi,pi);
+postParticles.h = mod(postParticles.h + delta_h + pi,2*pi) - pi; % limit(postParticles.h + delta_h,-pi,pi); 
 
 end % end estimator
 

@@ -72,12 +72,11 @@ end
 
 %% Mode 1: Initialization
 % Set number of particles:
-N = 2000; % obviously, you will need more particles than 10.
+N = 2000;
+
 if (init)
-    % Do the initialization of your estimator here!
     % These particles are the posterior particles at discrete time k = 0
     % which will be fed into your estimator again at k = 1
-    % Replace the following:
     postParticles.x = [KC.L*ones(1,N);zeros(1,N)];
     postParticles.y = (randi(2,2,N)-1).*KC.L;
     B = postParticles.y/KC.L;
@@ -89,12 +88,14 @@ end % end init
 %% Mode 2: Estimator iteration.
 % If init = 0, we perform a regular update of the estimator.
 
-% S1:Process update
+% ------------------------ S1: Process update --------------------------- %
+
+% Propagate particles without walls:
     priorParticles.x = prevPostParticles.x + diag(act)*cos(prevPostParticles.h)*KC.ts;
     priorParticles.y = prevPostParticles.y + diag(act)*sin(prevPostParticles.h)*KC.ts;
     priorParticles.h = prevPostParticles.h;
     
-    %Lower wall B1
+% Lower wall B1
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
     % case a: h >= -90deg
     B1a = priorParticles.y <= 0 & diag(act)*sin(priorParticles.h)<0 & priorParticles.h >= -pi/2;
@@ -107,7 +108,7 @@ end % end init
     alpha = (pi + priorParticles.h).*(1+v); 
     priorParticles.h(B1b) = pi - alpha(B1b);
     
-    %Right wall B2
+% Right wall B2
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
     % case a: h >= 0
     B2a = priorParticles.x >= KC.L & diag(act)*cos(priorParticles.h)>0 & priorParticles.h >= 0;
@@ -120,7 +121,7 @@ end % end init
     alpha = (pi/2 + priorParticles.h).*(1+v); 
     priorParticles.h(B2b) = -pi/2 - alpha(B2b);
     
-    %Upper wall B3
+% Upper wall B3
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
     % case a: h <= 90deg
     B3a = priorParticles.y >= KC.L & diag(act)*sin(priorParticles.h)>0 & priorParticles.h <= pi/2;
@@ -133,7 +134,7 @@ end % end init
     alpha = (pi - priorParticles.h).*(1+v); 
     priorParticles.h(B3b) = -pi + alpha(B3b);
     
-    %Left wall B4
+% Left wall B4
     v = (rand(2,N)).^(1/3)*KC.vbar.*(randi(2,2,N)*2-3);
     % case a: h <= 0
     B4a = priorParticles.x <= 0 & diag(act)*cos(priorParticles.h)<0 & priorParticles.h <= 0;
@@ -146,17 +147,24 @@ end % end init
     alpha = (priorParticles.h-pi/2).*(1+v); 
     priorParticles.h(B4b) = pi/2 - alpha(B4b);
     
+% Make sure the heading is between -pi and pi
     priorParticles.h = mod(priorParticles.h+pi,2*pi)-pi;
     
-% S2:Measurement update
+% ---------------------- S2: Measurement update ------------------------- %
+% If there is no measurement use Prior:
 postParticles = priorParticles;
 
+% Save Sensorlocations:
 x_sens = [KC.L KC.L 0    0]; % position of sensors in x
 y_sens = [0    KC.L KC.L 0]; % position of sensors in y
-for i = 1:4    
-    if(isfinite(sens(i)))        
-        beta = zeros(1,N);         
-        for k = 1:N
+
+for i = 1:4    % for all Sensors
+    if(isfinite(sens(i)))  % if a measurement is published do
+        % preallocate
+        beta = zeros(1,N);
+        
+        for k = 1:N % for all Particles do
+            
             % calculate distances to both robots
             d_1A = sqrt((priorParticles.x(1,k) - x_sens(i)).^2 + (priorParticles.y(1,k) - y_sens(i)).^2);
             d_1B = sqrt((priorParticles.x(2,k) - x_sens(i)).^2 + (priorParticles.y(2,k) - y_sens(i)).^2);
@@ -187,14 +195,19 @@ for i = 1:4
                     lik_false = 1/KC.wbar - abs(sens(i)-d_1A)/KC.wbar^2;
                 end
             end
+            
             % calculate likelihood according to total probability theorem
             beta(k) = KC.sbar*lik_false + (1-KC.sbar)*lik_correct;
-        end        
+        end
+        
+        % normalise beta
         alpha = 1/sum(beta);
-        beta = alpha*beta;         
+        beta = alpha*beta;
+        
+        % cummulate (beta_kum contains values from 0 to 1 in increasing order)
         beta_kum = cumsum(beta);
        
-        % reinizialise randomly if filter runs into numerical issues:
+        % Reinizialise randomly if filter runs into numerical issues:
         if any(isnan(beta_kum))
             postParticles.x = KC.L*rand(2,N);
             postParticles.y = KC.L*rand(2,N);
@@ -202,6 +215,7 @@ for i = 1:4
             return;
         end
         
+        % Resampling:
         for j = 1:N;
            r = rand();
            nbar = find(beta_kum >= r,1);
@@ -210,29 +224,41 @@ for i = 1:4
            postParticles.h(:,j) = priorParticles.h(:,nbar);
         end
         
-        % if there are more than one measurement at the same time:
+        % If there is more than one measurement at the same time:
         priorParticles = postParticles;
     end
 end
     
-% roughening
-K = 0.01;
-E_xy =sqrt(2)*KC.L;    % maximum inter-sample variability
-E_h = pi;              % maximum inter-sample variability
-sigma_xy = K*E_xy*N^(1/6);
+% Roughening
+K = 0.02;
+% maximum inter-sample variabilities
+E_x1 = max(postParticles.x(1,:))-min(postParticles.x(1,:)); %sqrt(2)*KC.L;    
+E_x2 = max(postParticles.x(2,:))-min(postParticles.x(2,:));
+E_y1 = max(postParticles.y(1,:))-min(postParticles.y(1,:));
+E_y2 = max(postParticles.y(2,:))-min(postParticles.y(2,:));
+E_h  = pi;
+
+sigma_x1 = K*E_x1*N^(1/6);
+sigma_x2 = K*E_x2*N^(1/6);
+sigma_y1 = K*E_y1*N^(1/6);
+sigma_y2 = K*E_y2*N^(1/6);
 sigma_h = K*E_h*N^(1/6);
 
-delta_x = randn(2,N)*sigma_xy^2;
-delta_y = randn(2,N)*sigma_xy^2;
+delta_x1 = randn(1,N)*sigma_x1^2;
+delta_x2 = randn(1,N)*sigma_x2^2;
+delta_x = [delta_x1; delta_x2];
+delta_y1 = randn(1,N)*sigma_y1^2;
+delta_y2 = randn(1,N)*sigma_y2^2;
+delta_y = [delta_y1; delta_y2];
 delta_h = randn(2,N)*sigma_h^2;
 
 postParticles.x = limit(postParticles.x + delta_x,0,KC.L);
 postParticles.y = limit(postParticles.y + delta_y,0,KC.L);
-postParticles.h = limit(postParticles.h + delta_h,-pi,pi);
+postParticles.h = mod(postParticles.h + delta_h + pi,2*pi) - pi; % limit(postParticles.h + delta_h,-pi,pi); 
 
 end % end estimator
 
-function a = limit(a,lowerbound, upperbound)
+function a = limit(a, lowerbound, upperbound)
     a(a < lowerbound) = lowerbound;
     a(a > upperbound) = upperbound;
 end

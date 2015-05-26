@@ -30,7 +30,7 @@ function run(designPart)
 % [24.04.15, MM]    2015 version
 
 % clear command window, close figures
-clc;
+% clc;
 close all;
 
 
@@ -59,8 +59,8 @@ unknownConst = UnknownConstants();
 % Set the random number generator state.
 % Uncomment to make results reproducable. This setting was used to generate
 % the plot in the problem description.
- rand('seed',6);
- randn('seed',6);
+%  rand('seed',8);
+%  randn('seed',8);
 
 
 %% Simulation
@@ -98,57 +98,57 @@ end
 % Calculate the total tracking error.  Basically the 2 norm of the distance
 % error.
 trackError = [loc(:,1) - posEst(:,1);loc(:,2) - posEst(:,2)];
-trackErrorNorm = sqrt(trackError'*trackError/N);
+trackErrorNorm = sqrt(trackError'*trackError/N)
 
 %%%%%
 % 2D-tracking plot
 %%%%%
-
-% Plot the actual robot position, y vs x, and the estimated robot position
-% and orientation as arrows.
-figure(1)
-plot(loc(:,1),loc(:,2),'b.', posEst(:,1),posEst(:,2),'g.', ...
-    loc(1,1),loc(1,2),'r*',loc(end,1),loc(end,2),'ro',posEst(1,1),posEst(1,2),'m*',posEst(end,1),posEst(end,2),'mo');
-hold on;
-quiver(loc(:,1), loc(:,2), cos(loc(:,3)), sin(loc(:,3)),0.08, 'b');
-quiver(posEst(:,1), posEst(:,2), cos(oriEst), sin(oriEst),0.08, 'g');
-%
-grid;
-legend('true','estimate','start true','end true','start est.','end est.');
-xlabel('x position');
-ylabel('y position');
-title(['position tracking error: ',num2str(trackErrorNorm,6),' m']);
-
-
-%%%%%
-% estimation error (incl. standard deviation)
-%%%%%
-
-% plot estimation error together with +/- 1 standard deviation
-figure(2);
-tm_ = tm;%[0;tm];
-%
-subplot(4,1,1);
-plot(tm_,loc(:,1)-posEst(:,1),tm_,sqrt(posVar(:,1)),'r',tm_,-sqrt(posVar(:,1)),'r');
-grid;
-ylabel('position x (m)');
-title('Estimation error with +/- standard deviation');
-%
-subplot(4,1,2);
-plot(tm_,loc(:,2)-posEst(:,2),tm_,sqrt(posVar(:,2)),'r',tm_,-sqrt(posVar(:,2)),'r');
-grid;
-ylabel('position y (m)');
-%
-subplot(4,1,3);
-plot(tm_,loc(:,3)-oriEst,tm_,sqrt(oriVar),'r',tm_,-sqrt(oriVar),'r');
-grid;
-ylabel('orientation r (rad)');
-%
-subplot(4,1,4);
-plot(tm_,wheelRadius-radiusEst,tm_,sqrt(radiusVar),'r',tm_,-sqrt(radiusVar),'r');
-grid;
-xlabel('time (s)');
-ylabel('wheel radius W (m)');
+% 
+% % Plot the actual robot position, y vs x, and the estimated robot position
+% % and orientation as arrows.
+% figure(1)
+% plot(loc(:,1),loc(:,2),'b.', posEst(:,1),posEst(:,2),'g.', ...
+%     loc(1,1),loc(1,2),'r*',loc(end,1),loc(end,2),'ro',posEst(1,1),posEst(1,2),'m*',posEst(end,1),posEst(end,2),'mo');
+% hold on;
+% quiver(loc(:,1), loc(:,2), cos(loc(:,3)), sin(loc(:,3)),0.08, 'b');
+% quiver(posEst(:,1), posEst(:,2), cos(oriEst), sin(oriEst),0.08, 'g');
+% %
+% grid;
+% legend('true','estimate','start true','end true','start est.','end est.');
+% xlabel('x position');
+% ylabel('y position');
+% title(['position tracking error: ',num2str(trackErrorNorm,6),' m']);
+% 
+% 
+% %%%%%
+% % estimation error (incl. standard deviation)
+% %%%%%
+% 
+% % plot estimation error together with +/- 1 standard deviation
+% figure(2);
+% tm_ = tm;%[0;tm];
+% %
+% subplot(4,1,1);
+% plot(tm_,loc(:,1)-posEst(:,1),tm_,sqrt(posVar(:,1)),'r',tm_,-sqrt(posVar(:,1)),'r');
+% grid;
+% ylabel('position x (m)');
+% title('Estimation error with +/- standard deviation');
+% %
+% subplot(4,1,2);
+% plot(tm_,loc(:,2)-posEst(:,2),tm_,sqrt(posVar(:,2)),'r',tm_,-sqrt(posVar(:,2)),'r');
+% grid;
+% ylabel('position y (m)');
+% %
+% subplot(4,1,3);
+% plot(tm_,loc(:,3)-oriEst,tm_,sqrt(oriVar),'r',tm_,-sqrt(oriVar),'r');
+% grid;
+% ylabel('orientation r (rad)');
+% %
+% subplot(4,1,4);
+% plot(tm_,wheelRadius-radiusEst,tm_,sqrt(radiusVar),'r',tm_,-sqrt(radiusVar),'r');
+% grid;
+% xlabel('time (s)');
+% ylabel('wheel radius W (m)');
 
 return;
 
